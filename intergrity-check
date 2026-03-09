@@ -1,0 +1,63 @@
+#!/bin/bash
+HASHFILE=~/.hashlogs.bak
+init () {
+	rm "$HASHFILE"
+	touch "$HASHFILE"
+	local file="$1"
+	if [[ ! -e "$file" ]]; then
+ 		echo "Error: file or path does exist: $file" >&2
+		exit 1
+	fi
+	for i in $(find $file -type f 2>/dev/null); do
+		sha256sum "$i" >> "$HASHFILE" 2>/dev/null
+	done
+}
+check () {
+	local path="$1"
+	if [[ ! -e "$path" ]]; then
+		echo "file or path does exist"
+		exit 1
+	fi
+	if [[ ! -s "$HASHFILE" ]]; then 
+		echo "Error: No hash found yet. Run init first" >&2
+		exit 1
+	fi
+	local res=$(grep "$1" "$HASHFILE") 
+	while read -r i; do
+		local hash=$(cut -d' ' -f1 <<< "$i")
+		local file=$(cut -d' ' -f3 <<< "$i")
+		if [[ ! -f "$file" ]]; then
+			echo "Status: Missing $file"
+		fi
+		local new_sha=($(sha256sum "$file"))
+		local new_hash=${new_sha[0]}
+		if [[ $hash != $new_hash ]]; then
+			echo "Status: Modified (Hash mismatch) at $file"
+		fi
+	done <<< $res
+}
+update () {
+
+	local path=$1
+
+	if [[ ! -e "$path" ]]; then
+        	echo "Error: Path does not exist: $path" >&2
+        	exit 1
+    	fi
+
+	if [[ -f "$path" ]]; then
+		grep -v -F "$path" "$HASHFILE" > temp && mv temp "$HASHFILE"
+	fi
+	
+	for i in $(find $path -type f 2>/dev/null); do
+		sha256sum "$i" >> "$HASHFILE" 2>/dev/null
+	done
+
+}
+if [[ "$1" == "init" ]]; then
+       	init "$2"
+elif [[ "$1" == "check" ]]; then 
+	check "$2"
+elif [[ "$1" == "update" ]]; then 
+	update "$2"
+fi
